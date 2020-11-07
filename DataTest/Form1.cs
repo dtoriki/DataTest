@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -15,18 +16,24 @@ namespace DataTest
         public Form1()
         {
             InitializeComponent();
+            Load += Loaded;
+            Disposed += OnDispose;
+        }
 
+        private void OnDispose(object sender, EventArgs e)
+        {
+            Load -= Loaded;
+            Disposed -= OnDispose;
+        }
+
+        private async void Loaded(object sender, EventArgs e)
+        {
             LoadData1();
             LoadData2();
             Next();
             LoadKritTerm();
-
-            /*LoadDB();
-            EngineConditionInDataGridFromEngine();*/
-            LoadDB().GetAwaiter().OnCompleted(() =>
-            {
-                EngineConditionInDataGridFromEngine();
-            });
+            await LoadDB();
+            EngineConditionInDataGridFromEngine();
         }
 
 
@@ -56,8 +63,7 @@ namespace DataTest
         public void LoadData1()
         {
             dataGridView1.Rows.Add("\n", "\n", "\n");
-            StreamReader sr;
-            sr = new StreamReader("dataGridView1.txt", UTF8Encoding.Default);
+            StreamReader sr = new StreamReader(Path.Combine(Environment.CurrentDirectory, "Data", "dataGridView1.txt"), UTF8Encoding.Default);
             for (int i = 0; i < 3; i++)
             {
                 try
@@ -72,7 +78,7 @@ namespace DataTest
         {
             dataGridView2.Rows.Add("\n", "\n");
             StreamReader sr;
-            sr = new StreamReader("dataGridView2.txt", UTF8Encoding.Default);
+            sr = new StreamReader(Path.Combine(Environment.CurrentDirectory, "Data", "dataGridView2.txt"), UTF8Encoding.Default);
             for (int i = 0; i < 2; i++)
             {
                 try
@@ -220,17 +226,21 @@ namespace DataTest
 
         public async Task LoadDB()
         {
+            string connectString = $"Data Source=(LocalDB)\\MSSQLLocalDB;AttachDbFilename={Path.Combine(Environment.CurrentDirectory, "Database.mdf")};Integrated Security=True";
+            SqlConnection myConnection = new SqlConnection(connectString);
+            Task openConnectionTask = myConnection.OpenAsync();
+
             Print("L_0.0__");
-            await Task.Run(async () =>
+            Print("L_0.1__");
+            table_count = 0;
+
+            string query = "SELECT * FROM [Table] ORDER BY Id";
+            await openConnectionTask;
+            SqlDataReader reader = null;
+            try
             {
-                Print("L_0.1__");
-                table_count = 0;
-                string connectString = @"Data Source=(LocalDB)\MSSQLLocalDB;AttachDbFilename=C:\Users\Master\source\repos\DataTest\DataTest\Database.mdf;Integrated Security=True";
-                SqlConnection myConnection = new SqlConnection(connectString);
-                await myConnection.OpenAsync();
-                string query = "SELECT * FROM [Table] ORDER BY Id";
                 SqlCommand command = new SqlCommand(query, myConnection);
-                SqlDataReader reader = await command.ExecuteReaderAsync();
+                reader = await command.ExecuteReaderAsync();
                 data.Clear();
                 while (await reader.ReadAsync())
                 {
@@ -241,22 +251,27 @@ namespace DataTest
                         data[data.Count - 1][i] = reader[i].ToString();
                     }
                 }
-                reader.Close();
+            }
+            finally
+            {
+                reader?.Close();
                 myConnection.Close();
+            }
 
-                foreach (string[] s in data)
+
+            foreach (string[] s in data)
+            {
+                try
                 {
-                    try
+                    lock (dataGridFromEngine)
                     {
-                        lock (dataGridFromEngine)
-                        {
-                            dataGridFromEngine.Rows.Add(s);
-                        }
+                        dataGridFromEngine.Rows.Add(s);
                     }
-                    catch(Exception e) { Print("!!!!!!!!!!!!!!!!!!!"); Print(e); Print("!!!!!!!!!!!!!!!!!!!"); }
                 }
-                Print("L_0.2___");
-            });
+                catch (Exception e) { Print("!!!!!!!!!!!!!!!!!!!"); Print(e); Print("!!!!!!!!!!!!!!!!!!!"); }
+            }
+            Print("L_0.2___");
+
             Print("L_0.3___OK...");
         }
 
@@ -352,9 +367,9 @@ namespace DataTest
                 double temp;
                 for (int c = 0; c < dataGridFromEngine.RowCount; c++)
                 {
-                    try
+
+                    if (Double.TryParse(dataGridFromEngine[6, c].Value?.ToString(), out temp))
                     {
-                        temp = Double.Parse(dataGridFromEngine[6, c].Value.ToString());
                         if (temp > kriterm[0] && temp <= kriterm[1])
                         {
                             dataGridFromEngine[7, c].Value = "norm";
@@ -368,11 +383,10 @@ namespace DataTest
                             dataGridFromEngine[7, c].Value = "avar";
                         }
                     }
-                    catch (Exception) { }//{Print($"{E} \n c={c}"); }
 
-                    try
+                    if (Double.TryParse(dataGridFromEngine[8, c].Value?.ToString(), out temp))
                     {
-                        temp = Double.Parse(dataGridFromEngine[8, c].Value.ToString());
+                        temp = Double.Parse(dataGridFromEngine[8, c].Value?.ToString());
                         if (temp > kriterm[3] && temp <= kriterm[4])
                         {
                             dataGridFromEngine[9, c].Value = "norm";
@@ -385,12 +399,11 @@ namespace DataTest
                         {
                             dataGridFromEngine[9, c].Value = "avar";
                         }
-                    }
-                    catch (Exception) { }
 
-                    try
+                    }
+
+                    if (Double.TryParse(dataGridFromEngine[10, c].Value?.ToString(), out temp))
                     {
-                        temp = Double.Parse(dataGridFromEngine[10, c].Value.ToString());
                         if (temp > kriterm[6] && temp <= kriterm[7])
                         {
                             dataGridFromEngine[11, c].Value = "norm";
@@ -404,11 +417,9 @@ namespace DataTest
                             dataGridFromEngine[11, c].Value = "avar";
                         }
                     }
-                    catch (Exception) { }
 
-                    try
+                    if (Double.TryParse(dataGridFromEngine[12, c].Value?.ToString(), out temp))
                     {
-                        temp = Double.Parse(dataGridFromEngine[12, c].Value.ToString());
                         if (temp > kriterm[9] && temp <= kriterm[10])
                         {
                             dataGridFromEngine[13, c].Value = "norm";
@@ -422,7 +433,7 @@ namespace DataTest
                             dataGridFromEngine[13, c].Value = "avar";
                         }
                     }
-                    catch (Exception) { }
+
                 }
             }
             catch (Exception) { }
